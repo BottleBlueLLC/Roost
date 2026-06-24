@@ -1,0 +1,17 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadRoostTableAndIndex",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:Query",
+        "dynamodb:GetItem"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:ap-northeast-1:*:table/Roost",
+        "arn:aws:dynamodb:ap-northeast-1:*:table/Roost/index/*"
+      ]
+    }
+  ]
+}

@@ -273,6 +273,59 @@
   }
   button.refresh:hover { border-color: var(--panel-border-strong); color: var(--text); }
 
+  .search-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 18px;
+  }
+
+  .search-input {
+    flex: 1;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--panel-border);
+    color: var(--text);
+    border-radius: var(--radius-sm);
+    padding: 9px 12px;
+    font-size: 13px;
+  }
+  .search-input::placeholder { color: var(--text-faint); }
+  .search-input:focus { outline: none; border-color: var(--accent); }
+
+  .lightbox-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    max-width: 90vw;
+  }
+
+  .lightbox-caption {
+    background: rgba(10,14,20,0.75);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-top: 12px;
+    max-width: 640px;
+  }
+  .lightbox-caption p {
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+    margin: 0 0 10px;
+  }
+
+  .lightbox-tags {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .tag-chip {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-radius: 999px;
+    padding: 3px 10px;
+    font-size: 11px;
+  }
+
   .host-input {
     background: rgba(255,255,255,0.05);
     border: 1px solid var(--accent);
@@ -338,7 +391,7 @@
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
   .lightbox img {
     max-width: 90vw;
-    max-height: 86vh;
+    max-height: 70vh;
     border-radius: 10px;
     box-shadow: 0 20px 60px rgba(0,0,0,0.5);
   }
@@ -563,6 +616,8 @@ function Gallery() {
   const [photos, setPhotos] = useState(null);
   const [loadedKeys, setLoadedKeys] = useState({});
   const [selected, setSelected] = useState(null);
+  const [searchInput, setSearchInput] = useState("");
+  const [activeTag, setActiveTag] = useState("");
 
   const fetchPhotos = useCallback(async () => {
     try {
@@ -574,21 +629,66 @@ function Gallery() {
     }
   }, []);
 
+  const fetchSearch = useCallback(async (tag) => {
+    setPhotos(null);
+    try {
+      const res = await fetch(`/api/search?tag=${encodeURIComponent(tag)}`);
+      const data = await res.json();
+      setPhotos(data.photos || []);
+    } catch (e) {
+      setPhotos([]);
+    }
+  }, []);
+
   useEffect(() => {
+    if (activeTag) return; // search mode doesn't auto-poll
     fetchPhotos();
     const id = setInterval(fetchPhotos, 10000);
     return () => clearInterval(id);
-  }, [fetchPhotos]);
+  }, [fetchPhotos, activeTag]);
+
+  const runSearch = (e) => {
+    e.preventDefault();
+    const tag = searchInput.trim().toLowerCase();
+    if (!tag) return;
+    setActiveTag(tag);
+    fetchSearch(tag);
+  };
+
+  const clearSearch = () => {
+    setActiveTag("");
+    setSearchInput("");
+    fetchPhotos();
+  };
 
   return (
     <div className="panel">
       <div className="gallery-head">
-        <h2>Captures{photos && <span className="sub">{photos.length}</span>}</h2>
-        <button className="refresh" onClick={fetchPhotos}>Refresh</button>
+        <h2>
+          {activeTag ? `"${activeTag}"` : "Captures"}
+          {photos && <span className="sub">{photos.length}</span>}
+        </h2>
+        {activeTag
+          ? <button className="refresh" onClick={clearSearch}>Clear</button>
+          : <button className="refresh" onClick={fetchPhotos}>Refresh</button>
+        }
       </div>
 
+      <form className="search-row" onSubmit={runSearch}>
+        <input
+          className="search-input mono"
+          placeholder="Search by what's in the photo (e.g. dog, car, package)"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+        />
+        <button className="ctl" type="submit">Search</button>
+      </form>
+
       {photos === null && <div className="empty-state">Loading…</div>}
-      {photos !== null && photos.length === 0 && (
+      {photos !== null && photos.length === 0 && activeTag && (
+        <div className="empty-state">No photos tagged "{activeTag}" yet.</div>
+      )}
+      {photos !== null && photos.length === 0 && !activeTag && (
         <div className="empty-state">No captures yet — send a snapshot to see it appear here.</div>
       )}
 
@@ -612,7 +712,21 @@ function Gallery() {
       {selected && (
         <div className="lightbox" onClick={() => setSelected(null)}>
           <button className="lightbox-close" onClick={() => setSelected(null)}>✕</button>
-          <img src={selected.url} alt={selected.key} onClick={(e) => e.stopPropagation()} />
+          <div className="lightbox-content" onClick={(e) => e.stopPropagation()}>
+            <img src={selected.url} alt={selected.key} />
+            {selected.description && (
+              <div className="lightbox-caption">
+                <p>{selected.description}</p>
+                {selected.tags && selected.tags.length > 0 && (
+                  <div className="lightbox-tags">
+                    {selected.tags.map((t) => (
+                      <span className="tag-chip mono" key={t}>{t}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
