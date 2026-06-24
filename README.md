@@ -2,14 +2,15 @@
 
 A self-hosted camera pipeline you own end to end. A Raspberry Pi captures
 from a USB camera, a Rust app exposes control over WebSocket, a Python
-script pushes snapshots to a private S3 bucket, and a dashboard pulls them
-back down and gives you live controls. No cloud camera subscription, no
-app phoning home to someone else's servers.
+script pushes snapshots to a private S3 bucket, a Lambda runs Claude
+vision on each new photo to describe and tag it, and a dashboard pulls it
+all together with live controls and search-by-contents. No cloud camera
+subscription, no app phoning home to someone else's servers.
 
 ## The pipeline
 
 ```
-                        [USB camera] 
+                        [USB camera]
                               | MJPG
                               v
                         [capture app, on the Pi]
@@ -19,12 +20,14 @@ app phoning home to someone else's servers.
                         [s3 uploader, on the Pi]
                               |  watches frames/, uploads, deletes local copy
                               v
-                        [S3 bucket, private]
-                              ^
-                              |  presigned URLs
-                        [dashboard, anywhere]
+                        [S3 bucket, private] --- new image event --->  [vision Lambda]
+                              ^                                              |  Claude describes + tags
+                              |  presigned URLs                             v
+                              |                                       [DynamoDB: Roost]
+                        [dashboard, anywhere]  <--- tag search --------------+
                               |  Flask backend + React frontend
                               |  controls the camera directly over WebSocket
+                              |  search photos by what's in them
 ```
 
 ## What's in this repo
@@ -58,14 +61,29 @@ new frame to a private S3 bucket, and deletes the local copy once the
 upload succeeds. If an upload fails it leaves the file in place and retries
 on the next pass, so a flaky connection never costs you a capture.
 
+### Vision recognition (`vision/`)
+
+An AWS Lambda that fires on every new image landing in the S3 bucket. It
+sends the photo to Claude, which returns a natural-language description
+and a list of search tags, and writes both to a DynamoDB table. Because
+Claude actually sees the image, the tags are open-vocabulary and the
+descriptions reflect the whole scene, not a fixed category list.
+
+The DynamoDB table uses a single-table design (generic PK/SK keys plus a
+GSI for tag lookups), so searching "find all my photos tagged dog, newest
+first" is one indexed query, and the schema already supports multiple
+cameras and users without a migration.
+
 ### Dashboard (`viewer/`)
 
 A Flask backend plus a single-file React frontend. The backend holds the
 AWS credentials and hands the page short-lived presigned URLs, which keeps
 the S3 bucket fully private rather than public. The frontend talks directly
-to the camera's WebSocket ports to send commands, and shows a live gallery
-of captures pulled from S3. It runs anywhere with network access to both
-AWS and the camera, so it does not have to live on the Pi.
+to the camera's WebSocket ports to send commands, shows a live gallery of
+captures pulled from S3, and lets you search photos by what's in them
+(querying the recognition tags). Clicking a result shows Claude's
+description and the tags. It runs anywhere with network access to both AWS
+and the camera, so it does not have to live on the Pi.
 
 ### Service file (`camera.service`)
 
@@ -75,11 +93,12 @@ failure, so the pipeline survives reboots and dropped SSH sessions.
 ## Setup
 
 The full step-by-step guide, from flashing the Pi through a working
-dashboard, including the AWS bucket, the scoped IAM user, and credentials,
-lives on the blog:
+dashboard with recognition and search, including the AWS bucket, the
+DynamoDB table, the Lambda, the scoped IAM users, and credentials, lives
+on the blog:
 
 **[blog.hiimmichael.com/articles/roost-setup-tutorial.html](https://blog.hiimmichael.com/articles/roost-setup-tutorial.html)**
 
 Start with the camera. Get a single frame off the device and onto disk
-before worrying about WebSockets, S3, or dashboards. Everything else is
-plumbing once that first frame exists.
+before worrying about WebSockets, S3, recognition, or dashboards.
+Everything else is plumbing once that first frame exists.
