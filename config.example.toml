@@ -1,0 +1,25 @@
+[video]
+# Substring to match against /dev/v4l/by-path entries for your camera.
+# Confirmed on the Pi: both
+#   platform-xhci-hcd.1-usb-0:1:1.0-video-index0 -> ../../video0
+#   platform-xhci-hcd.1-usbv2-0:1:1.0-video-index0 -> ../../video0
+# point at /dev/video0 (the legacy "usb" alias and "usbv2" alias for the
+# same physical device). This substring matches only the first one.
+path_identifier = "CHANGE_ME -- run `ls -la /dev/v4l/by-path` and match your camera's entry"
+
+default_width = 3840
+default_height = 2160
+
+# Continuous saving writes every captured frame to disk -- at 4K/30fps
+# that's heavy SD card wear and disk space use. Off by default;
+# snapshot/multisnapshot commands still work regardless of this setting.
+continuous_save = false
+frame_directory = "frames"
+
+# JPEG quality (1-100) used when re-encoding snapshot frames. 95 is
+# near-lossless; drop it if file sizes matter more than quality.
+jpeg_quality = 95
+
+[network]
+listener1_address = "0.0.0.0:8080"
+listener2_address = "0.0.0.0:8081"

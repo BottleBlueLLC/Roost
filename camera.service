@@ -1,0 +1,14 @@
+[Unit]
+Description=Camera streaming service
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/camera
+ExecStart=/home/pi/camera/target/release/camera
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

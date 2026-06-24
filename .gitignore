@@ -1,0 +1,6 @@
+target/
+Cargo.lock
+frames/
+uploader-venv/
+viewer/
+config.toml
