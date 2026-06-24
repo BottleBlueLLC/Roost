@@ -9,7 +9,10 @@ app phoning home to someone else's servers.
 ## The pipeline
 
 ```
-[USB camera] --MJPG--> [capture app, on the Pi]
+                        [USB camera] 
+                              | MJPG
+                              v
+                        [capture app, on the Pi]
                               |  WebSocket control (ports 8080/8081)
                               |  writes snapshots to frames/
                               v
