@@ -1,88 +1,82 @@
-# Camera streaming service — rewrite notes
+# Roost
 
-This is a rewrite of the original dual-camera Rust streaming app, adapted
-for your actual hardware: a single 4K USB camera (Ailipu-based, USB ID
-`32e4:0415`) on a Raspberry Pi 5.
+A self-hosted camera pipeline you own end to end. A Raspberry Pi captures
+from a USB camera, a Rust app exposes control over WebSocket, a Python
+script pushes snapshots to a private S3 bucket, and a dashboard pulls them
+back down and gives you live controls. No cloud camera subscription, no
+app phoning home to someone else's servers.
 
-## Bugs fixed vs. the original
-
-| Bug | Original behavior | Fix |
-|---|---|---|
-| Lifetime error | `Stream<'a>` borrowed from a `Device` that was dropped when `initialize_video_stream()` returned | `Device` and `Stream` are now created and used entirely within `capture_worker()` — no cross-function lifetime |
-| `videoresolution` silently ignored | Updated a shared `VideoFormat` struct, but the running stream never re-read it | Capture loop now compares the live format against the shared one every iteration and restarts the stream on change |
-| Hardcoded device paths | `main()` matched on literal PCIe path strings for two specific cameras | Device path is resolved generically from `config.toml`'s `path_identifier`, matched against `/dev/v4l/by-path` |
-| Mixed channel types | `std::sync::mpsc` and `tokio::sync::mpsc` both used inside the same async task (`process_stream`) | One channel type per pipeline: `std::sync::mpsc` for the blocking capture thread, consumed there only |
-| Blocking the async runtime | Sensor-alert file polling created a brand-new `tokio::runtime::Runtime` and called `block_on()` from inside an already-running async task | Polling now uses `tokio::select!` with async file I/O (`tokio::fs`), no nested runtime |
-| Hidden warnings | `#![allow(warnings)]` at the top of `main.rs` | Removed |
-| Per-frame thread spawn | A new OS thread was spawned for *every* captured frame | One dedicated frame-writer thread, fed by a channel |
-| Continuous disk writes | Every frame was timestamped and written to disk whenever the stream was "active" (default), regardless of whether anyone asked for it | Off by default (`continuous_save = false` in config.toml) — snapshot/multisnapshot commands still write frames on request. Flip it on if you actually want continuous recording, but know that's heavy SD card wear at 30fps. |
-| Dead code | `BarcodeDetect` (QR scanning) and the WebRTC track-creation functions were imported/defined but never called anywhere in `main()` | Removed — they added dependency weight for code that wasn't wired up. Can be re-added later if you want QR or WebRTC support for real. |
-
-## What's still the same
-
-- Two WebSocket listeners: port 8080 (camera control: snapshot, resolution,
-  print jobs, sensor alarm) and port 8081 (stream control: start/stop)
-- MJPG capture via `v4l`, timestamp overlay, JPEG re-encode via `turbojpeg`
-- Printer integration via your existing `scripts/printer_enum.sh` /
-  `printer_helper.sh`
-
-## Before building: confirm `path_identifier`
-
-```bash
-ls -la /dev/v4l/by-path
-```
-
-You should see an entry like:
+## The pipeline
 
 ```
-usb-xhci-hcd.1-1-video-index0 -> ../../video0
+[USB camera] --MJPG--> [capture app, on the Pi]
+                              |  WebSocket control (ports 8080/8081)
+                              |  writes snapshots to frames/
+                              v
+                        [s3 uploader, on the Pi]
+                              |  watches frames/, uploads, deletes local copy
+                              v
+                        [S3 bucket, private]
+                              ^
+                              |  presigned URLs
+                        [dashboard, anywhere]
+                              |  Flask backend + React frontend
+                              |  controls the camera directly over WebSocket
 ```
 
-Confirm the string in `config.toml`'s `path_identifier` matches what's
-actually there — your earlier `lsusb` output suggested
-`usb-xhci-hcd.1-1`, so I've set it to `usb-xhci-hcd.1-1-video-index0`, but
-please double check against the real `ls` output before building, since
-USB bus/port numbering can shift.
+## What's in this repo
 
-## Build dependencies (on the Pi)
+### Capture app (`src/`, `Cargo.toml`, `config.example.toml`)
 
-```bash
-sudo apt update
-sudo apt install -y build-essential pkg-config clang libclang-dev \
-    libjpeg-turbo-progs libturbojpeg0-dev v4l-utils
-```
+The core, written in Rust. It opens a USB camera via `v4l`, streams MJPG,
+overlays a timestamp on snapshots, and exposes two WebSocket control
+sockets:
 
-**Rust toolchain:** if `apt list rustc` on your Pi gives you anything older
-than roughly 1.85, install via rustup instead — one of the crates here
-(`v4l`'s FFI binding generator) needs a fairly current cargo:
+- **Port 8080 (camera control):** snapshot, multi-snapshot, resolution
+  change, shutdown, plus printer commands.
+- **Port 8081 (stream control):** start and stop the stream.
 
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source "$HOME/.cargo/env"
-```
+Commands are JSON, for example `{"command":"snapshot"}`. The capture app
+identifies the camera by a stable `/dev/v4l/by-path` substring set in
+`config.toml`, rather than a `/dev/videoN` number that can shift between
+boots, and captures MJPG because most generic USB cameras only reach
+usable frame rates in that format.
 
-## Build and run
+The control socket also watches for an external trigger file on disk and
+fires a burst of captures when it appears. As written that is a simple
+file watch, but the same hook generalizes: a motion sensor, a doorbell, a
+webhook from elsewhere on your network, anything that can drop a signal,
+can make this camera react without a direct command.
 
-```bash
-cd camera
-cargo build --release
-./target/release/camera
-```
+### S3 uploader (`s3_uploader.py`)
 
-First build will take a while on a Pi 5 (1GB) — `bindgen` and friends are
-heavy. If you hit out-of-memory during the build, add swap temporarily or
-build with `cargo build --release -j 1` to limit parallel codegen units.
+A small Python script that watches the capture output folder, uploads each
+new frame to a private S3 bucket, and deletes the local copy once the
+upload succeeds. If an upload fails it leaves the file in place and retries
+on the next pass, so a flaky connection never costs you a capture.
 
-## A note on how I verified this
+### Dashboard (`viewer/`)
 
-I rewrote and reviewed this code carefully, including pulling the exact
-source of the `v4l` crate from GitHub to confirm method signatures
-(`Device::with_path`, `MmapStream::new`, etc.) line by line. I wasn't able
-to get a full `cargo check` running in my own sandbox — its Rust toolchain
-is a couple years old at this point and chokes on parts of today's
-dependency graph that need a newer Rust edition. That's a sandbox
-limitation, not a reflection of the code. Your Pi will have (or should
-have, via rustup) a current toolchain, so the real test is just running
-`cargo build` there. If it throws errors, send them my way and we'll fix
-them together — much faster to debug with a real compiler in the loop
-anyway.
+A Flask backend plus a single-file React frontend. The backend holds the
+AWS credentials and hands the page short-lived presigned URLs, which keeps
+the S3 bucket fully private rather than public. The frontend talks directly
+to the camera's WebSocket ports to send commands, and shows a live gallery
+of captures pulled from S3. It runs anywhere with network access to both
+AWS and the camera, so it does not have to live on the Pi.
+
+### Service file (`camera.service`)
+
+A `systemd` unit that runs the capture app on boot and restarts it on
+failure, so the pipeline survives reboots and dropped SSH sessions.
+
+## Setup
+
+The full step-by-step guide, from flashing the Pi through a working
+dashboard, including the AWS bucket, the scoped IAM user, and credentials,
+lives on the blog:
+
+**[blog.hiimmichael.com/articles/roost-setup-tutorial.html](https://blog.hiimmichael.com/articles/roost-setup-tutorial.html)**
+
+Start with the camera. Get a single frame off the device and onto disk
+before worrying about WebSockets, S3, or dashboards. Everything else is
+plumbing once that first frame exists.
