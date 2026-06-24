@@ -14,7 +14,7 @@ app phoning home to someone else's servers.
                               v
                         [capture app, on the Pi]
                               |  WebSocket control (ports 8080/8081)
-                              |  writes snapshots to frames/
+                              |  writes snapshots to frames directory
                               v
                         [s3 uploader, on the Pi]
                               |  watches frames/, uploads, deletes local copy
