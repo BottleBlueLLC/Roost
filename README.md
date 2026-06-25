@@ -14,6 +14,8 @@ Under the hood: a Python script pushes snapshots to a private S3 bucket, the
 vision Lambda writes Claude's descriptions and tags to DynamoDB, and a dashboard
 pulls it all together with live controls and search-by-contents.
 
+<img width="1200" height="627" alt="roost" src="https://github.com/user-attachments/assets/d69d732b-1ec4-4320-806d-025825d3e425" />
+
 ## The pipeline
 
 ```
