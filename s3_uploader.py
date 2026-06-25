@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+#
+# Roost
+# Bottle Blue LLC
+# Authored by Michael Coughlin
+# 2026-06-25
+# https://bottlebluellc.com
+# https://blog.hiimmichael.com/articles/roost-setup-tutorial.html
 """
 Watches the camera's frame output directory. Whenever a new .jpg shows up,
 uploads it to S3, then deletes the local copy.

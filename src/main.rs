@@ -1,6 +1,11 @@
-// Rewritten camera streaming application.
+// Roost
+// Bottle Blue LLC
+// Authored by Michael Coughlin
+// 2026-06-25
+// https://bottlebluellc.com
+// https://blog.hiimmichael.com/articles/roost-setup-tutorial.html
 //
-// See README.md for the list of bugs fixed relative to the original version.
+// Camera streaming application for the Roost pipeline.
 
 use ab_glyph::{Font, FontRef, Glyph, PxScale, ScaleFont};
 use chrono::Local;
@@ -118,8 +123,8 @@ struct CommandPacket {
 // ---------------------------------------------------------------------------
 
 /// Resolves a /dev/videoN path by matching `identifier` against entries in
-/// /dev/v4l/by-path. This replaces the old code's hardcoded PCIe path keys
-/// in main() -- the identifier is supplied entirely from config.toml.
+/// /dev/v4l/by-path. The identifier is supplied entirely from config.toml,
+/// so no device paths are hardcoded.
 fn resolve_device_path(identifier: &str) -> Result<String, String> {
     let output = Command::new("ls")
         .arg("-la")
@@ -151,11 +156,10 @@ fn resolve_device_path(identifier: &str) -> Result<String, String> {
 // ---------------------------------------------------------------------------
 
 /// Draws white text in the bottom-right corner of an RGB image by
-/// rasterizing glyph outlines directly with ab_glyph. This replaces the
-/// original imageproc-based text drawing: imageproc forces the `image`
-/// crate's default features on (which pull in an AVIF encoder dependency
-/// chain), so we draw glyphs by hand here to keep the dependency tree free
-/// of that.
+/// rasterizing glyph outlines directly with ab_glyph. Glyphs are drawn by
+/// hand here rather than via imageproc, which forces the `image` crate's
+/// default features on (pulling in an AVIF encoder dependency chain); doing
+/// it this way keeps the dependency tree free of that.
 fn draw_text_on_image(image: &mut RgbImage, text: &str) {
     let font = FontRef::try_from_slice(include_bytes!("DejaVuSans.ttf")).unwrap();
     let scale = PxScale::from(22.0);
@@ -255,18 +259,17 @@ fn add_timestamp_to_image(buffer: &[u8], quality: i32) -> Result<Vec<u8>, Box<dy
     compress_rgb_to_jpeg(&rgb_image, quality)
 }
 
-/// Dedicated thread that writes frames to disk, fed by a channel. Avoids
-/// spawning a new OS thread per frame (the old code spawned a thread for
-/// every single captured frame).
+/// Dedicated thread that writes frames to disk, fed by a channel. Using one
+/// long-lived writer thread avoids spawning a new OS thread per frame.
 ///
-/// Unlike the original `save_images_in_order`, this does not buffer frames
-/// waiting for a strict sequential order: frames arrive from a single
-/// producer thread (`capture_worker`) over one mpsc channel, which already
-/// guarantees in-order delivery, so there's no out-of-order case to handle.
-/// (Re-ordering by frame number was actually a bug here: with
-/// `continuous_save` off, only snapshot-triggered frames are sent, so frame
-/// numbers are sparse -- e.g. frame #47 might be the first one sent. Waiting
-/// for #0, #1, #2... first meant nothing was ever written.)
+/// Frames are written as they arrive rather than buffered into a strict
+/// sequential order: they come from a single producer thread
+/// (`capture_worker`) over one mpsc channel, which already guarantees
+/// in-order delivery, so there's no out-of-order case to handle. Re-ordering
+/// by frame number would also be wrong here: with `continuous_save` off,
+/// only snapshot-triggered frames are sent, so frame numbers are sparse
+/// (e.g. frame #47 might be the first one sent), and waiting for #0, #1,
+/// #2... first would mean nothing ever gets written.
 fn frame_writer_thread(rx: StdReceiver<(u64, String, Vec<u8>)>, frame_dir: String) {
     let _ = std::fs::create_dir_all(&frame_dir);
 
@@ -284,10 +287,9 @@ fn frame_writer_thread(rx: StdReceiver<(u64, String, Vec<u8>)>, frame_dir: Strin
 // ---------------------------------------------------------------------------
 
 /// Owns the v4l Device and Stream entirely within this function's scope, so
-/// there is no cross-function lifetime to manage (this is what caused the
-/// original `Stream<'a>` lifetime error -- a Device dropped at the end of an
-/// `initialize_video_stream()` call while a Stream borrowing from it was
-/// returned to the caller).
+/// there is no cross-function lifetime to manage: keeping the Device and the
+/// Stream that borrows from it together in one scope avoids any dangling
+/// borrow.
 ///
 /// Runs on a blocking thread (via spawn_blocking from main) since
 /// `Stream::next()` is a blocking syscall and must never run directly on a
@@ -354,9 +356,9 @@ fn capture_worker(
 
         loop {
             // Resolution change requested -- tear down and reopen with the
-            // new format. This is the fix for the old `videoresolution`
-            // command, which updated the shared format struct but the
-            // running stream never re-read it.
+            // new format. The running stream cannot change format in place,
+            // so a `videoresolution` command takes effect by restarting the
+            // stream here once the shared format struct changes.
             if *format.lock().unwrap() != active_format {
                 println!("{}: format change detected, restarting stream", label);
                 continue 'restart;
@@ -414,8 +416,7 @@ fn capture_worker(
 }
 
 // ---------------------------------------------------------------------------
-// Printer helpers (unchanged behavior, just no #![allow(warnings)] hiding
-// issues anymore)
+// Printer helpers
 // ---------------------------------------------------------------------------
 
 async fn check_for_printers(enable_printers: bool) -> JsonValue {
@@ -497,9 +498,9 @@ async fn handle_camera_control_socket(
     loop {
         // tokio::select! lets us handle incoming websocket messages and poll
         // the sensor-alert file concurrently, without ever blocking the
-        // runtime. The old code polled this file with a brand-new
-        // `Runtime::new().block_on(...)` nested inside an already-running
-        // async task -- that's a real deadlock/stall risk and is gone here.
+        // runtime. Polling the file this way (rather than with a nested
+        // blocking runtime) keeps everything on the one async runtime and
+        // avoids any deadlock or stall risk.
         tokio::select! {
             message_result = ws_stream.next() => {
                 let Some(message_result) = message_result else { break };

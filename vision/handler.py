@@ -1,3 +1,10 @@
+#
+# Roost
+# Bottle Blue LLC
+# Authored by Michael Coughlin
+# 2026-06-25
+# https://bottlebluellc.com
+# https://blog.hiimmichael.com/articles/roost-setup-tutorial.html
 """
 Roost vision Lambda.
 
