@@ -64,3 +64,7 @@ wiring, and adding search to the dashboard) is covered step by step on the
 blog, not here:
 
 **[blog.hiimmichael.com/articles/roost-setup-tutorial.html](https://blog.hiimmichael.com/articles/roost-setup-tutorial.html)**
+
+---
+
+Part of [Roost](../README.md), an open-source, self-hosted camera pipeline by Bottle Blue LLC.

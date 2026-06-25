@@ -1,11 +1,18 @@
 # Roost
 
-A self-hosted camera pipeline you own end to end. Roost is powered by a Raspberry Pi and captures
-from a USB camera, a Rust app exposes control over WebSocket, a Python
-script pushes snapshots to a private S3 bucket, a Lambda runs Claude
-vision on each new photo to describe and tag it, and a dashboard pulls it
-all together with live controls and search-by-contents. No cloud camera
+An open-source, self-hosted camera pipeline you own end to end. Roost runs on a Raspberry
+Pi with a USB camera, and a Rust app exposes the camera as a set of commands
+over WebSocket. Anything that can send a command can drive it: the dashboard's
+live controls but also a sensor on your network, a door or garage
+opening, a motion detector tripping, a webhook firing. When something happens,
+Roost captures it, a Lambda runs Claude vision on the photo to describe and tag
+what's in the frame, and everything lands in a private store you can search by
+contents ("show me every photo with a delivery truck"). No cloud camera
 subscription, no app phoning home to someone else's servers.
+
+Under the hood: a Python script pushes snapshots to a private S3 bucket, the
+vision Lambda writes Claude's descriptions and tags to DynamoDB, and a dashboard
+pulls it all together with live controls and search-by-contents.
 
 ## The pipeline
 
@@ -102,3 +109,7 @@ on the blog:
 Start with the camera. Get a single frame off the device and onto disk
 before worrying about WebSockets, S3, recognition, or dashboards.
 Everything else is plumbing once that first frame exists.
+
+---
+
+Roost is open source, built and maintained by Bottle Blue LLC.

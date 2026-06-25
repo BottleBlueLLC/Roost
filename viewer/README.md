@@ -106,4 +106,6 @@ backoff.
 
 ---
 
-Part of the [Roost](../README.md) self-hosted camera pipeline.
+Part of [Roost](../README.md), an open-source, self-hosted camera pipeline by Bottle Blue LLC.
+
+Full setup guide: **[blog.hiimmichael.com/articles/roost-setup-tutorial.html](https://blog.hiimmichael.com/articles/roost-setup-tutorial.html)**
