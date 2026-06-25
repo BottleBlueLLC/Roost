@@ -1,6 +1,6 @@
 # Roost
 
-A self-hosted camera pipeline you own end to end. A Raspberry Pi captures
+A self-hosted camera pipeline you own end to end. The Roost device captures
 from a USB camera, a Rust app exposes control over WebSocket, a Python
 script pushes snapshots to a private S3 bucket, a Lambda runs Claude
 vision on each new photo to describe and tag it, and a dashboard pulls it
@@ -13,11 +13,11 @@ subscription, no app phoning home to someone else's servers.
                         [USB camera]
                               | MJPG
                               v
-                        [capture app, on the Pi]
+                        [capture app, on the Roost device]
                               |  WebSocket control (ports 8080/8081)
                               |  writes snapshots to frames directory
                               v
-                        [s3 uploader, on the Pi]
+                        [s3 uploader, on the Roost device]
                               |  watches frames/, uploads, deletes local copy
                               v
                         [S3 bucket, private] --- new image event --->  [vision Lambda]
@@ -83,7 +83,7 @@ to the camera's WebSocket ports to send commands, shows a live gallery of
 captures pulled from S3, and lets you search photos by what's in them
 (querying the recognition tags). Clicking a result shows Claude's
 description and the tags. It runs anywhere with network access to both AWS
-and the camera, so it does not have to live on the Pi.
+and the camera, so it does not have to live on the Roost device.
 
 ### Service file (`camera.service`)
 
@@ -92,7 +92,7 @@ failure, so the pipeline survives reboots and dropped SSH sessions.
 
 ## Setup
 
-The full step-by-step guide, from flashing the Pi through a working
+The full step-by-step guide, from flashing the device through a working
 dashboard with recognition and search, including the AWS bucket, the
 DynamoDB table, the Lambda, the scoped IAM users, and credentials, lives
 on the blog:

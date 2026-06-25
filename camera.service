@@ -4,9 +4,9 @@ After=network.target
 
 [Service]
 Type=simple
-User=pi
-WorkingDirectory=/home/pi/camera
-ExecStart=/home/pi/camera/target/release/camera
+User=roost
+WorkingDirectory=/home/roost/camera
+ExecStart=/home/roost/camera/target/release/camera
 Restart=on-failure
 RestartSec=2
 

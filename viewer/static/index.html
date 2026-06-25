@@ -55,13 +55,13 @@
   layout viewport. initial-scale=1 disables the automatic zoom-out.
 -->
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>picamera</title>
+<title>roost</title>
 
 <!--
   Google Fonts: three typefaces chosen for different roles.
 
     Space Grotesk (weights 500, 600, 700):
-        Used only for the "picamera" brand name in the top bar. A geometric
+        Used only for the "roost" brand name in the top bar. A geometric
         sans-serif with slightly quirky letterforms; distinctive at small
         sizes without being noisy.
 
@@ -183,7 +183,7 @@ a, button { font-family: inherit; }
 }
 
 /*
-  Brand group: the accent dot and the "picamera" wordmark, side by side,
+  Brand group: the accent dot and the "roost" wordmark, side by side,
   vertically centered.
 */
 .brand {
@@ -776,6 +776,49 @@ button:focus-visible, .photo-card:focus-visible { outline: 2px solid var(--accen
   .tile-stage.live .ring { animation: none; opacity: .3; }
   .pill.connecting .dot { animation: none; }
 }
+
+/* ---- Camera-start confirmation dialog ---- */
+
+.confirm-overlay {
+  position: fixed; inset: 0;
+  background: rgba(6,8,12,0.72);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+  animation: fadeIn .15s ease-out;
+}
+
+.confirm-box {
+  background: #13171f;
+  border: 1px solid var(--panel-border-strong);
+  border-radius: var(--radius);
+  padding: 28px 28px 24px;
+  max-width: 360px;
+  width: 90vw;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+}
+
+.confirm-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 10px;
+}
+
+.confirm-body {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 0 0 22px;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
 </style>
 </head>
 <body>
@@ -840,18 +883,18 @@ const { useState, useEffect, useRef, useCallback } = React;
 // The localStorage key under which the camera hostname is saved. Using a
 // namespaced key avoids collisions with other sites or apps that might use
 // localStorage on the same origin (localhost:5000).
-const STORAGE_KEY = "picamera-host";
+const STORAGE_KEY = "roost-host";
 
 // Read the saved camera hostname from localStorage on page load. Returns
-// "picamera.lan" as the default if nothing has been saved yet (first visit)
+// "roost.lan" as the default if nothing has been saved yet (first visit)
 // or if localStorage is unavailable (sandboxed iframe, private mode that
 // blocks storage writes, etc.). The try/catch converts the storage access
 // error into a graceful fallback rather than a page crash.
 function loadSavedHost() {
   try {
-    return localStorage.getItem(STORAGE_KEY) || "picamera.lan";
+    return localStorage.getItem(STORAGE_KEY) || "roost.lan";
   } catch (e) {
-    return "picamera.lan";
+    return "roost.lan";
   }
 }
 
@@ -878,7 +921,7 @@ function saveHost(host) {
 // be used by functional components like CameraTile and App.
 //
 // Parameters:
-//   host (string): hostname or IP of the camera Pi, e.g. "picamera.lan"
+//   host (string): hostname or IP of the Roost device, e.g. "roost.lan"
 //   port (number): WebSocket port to connect to (8080 or 8081)
 //
 // Returns an object with:
@@ -919,7 +962,7 @@ function useCameraSocket(host, port) {
       setStatus("connecting");
 
       // Open a plain (non-TLS) WebSocket connection. ws:// is fine on a local
-      // network; the Pi and the browser are both inside the LAN.
+      // network; the Roost device and the browser are both inside the LAN.
       const ws = new WebSocket(`ws://${host}:${port}`);
       wsRef.current = ws; // store the socket in the ref for the "send" callback
 
@@ -934,7 +977,7 @@ function useCameraSocket(host, port) {
 
       // onclose fires whenever the connection closes, whether cleanly or due
       // to an error. Schedule a reconnect attempt in 4 seconds. This means
-      // the dashboard recovers automatically if the Pi reboots or the network
+      // the dashboard recovers automatically if the Roost device reboots or the network
       // temporarily drops.
       ws.onclose = () => {
         if (cancelled) return;
@@ -1015,7 +1058,7 @@ function StatusPill({ label, status }) {
 // configuration value.
 //
 // Props:
-//   host     (string):   the currently configured hostname, e.g. "picamera.lan"
+//   host     (string):   the currently configured hostname, e.g. "roost.lan"
 //   onChange (function): called with the new hostname string when the user commits
 function HostSetting({ host, onChange }) {
   // "editing" controls whether we show the button or the input field.
@@ -1042,7 +1085,7 @@ function HostSetting({ host, onChange }) {
   // propagate the new hostname up to App, which will update state and trigger
   // new WebSocket connections to the new host.
   const commit = () => {
-    const next = draft.trim() || "picamera.lan"; // do not allow an empty hostname
+    const next = draft.trim() || "roost.lan"; // do not allow an empty hostname
     onChange(next);
     setEditing(false);
   };
@@ -1061,6 +1104,34 @@ function HostSetting({ host, onChange }) {
         if (e.key === "Escape") setEditing(false); // Escape cancels without saving
       }}
     />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CameraStartDialog component
+// ---------------------------------------------------------------------------
+//
+// Modal dialog shown when the user tries to take a snapshot while the camera
+// stream is not running. Lets them start the camera in one click or dismiss.
+//
+// Props:
+//   onStart  (function): called when the user clicks "Start camera"
+//   onCancel (function): called when the user clicks "No" or the overlay
+function CameraStartDialog({ onStart, onCancel }) {
+  return (
+    <div className="confirm-overlay" onClick={onCancel}>
+      <div className="confirm-box" onClick={(e) => e.stopPropagation()}>
+        <p className="confirm-title">Camera is not running</p>
+        <p className="confirm-body">
+          The camera must be started before you can take a snapshot.
+          Would you like to start the camera?
+        </p>
+        <div className="confirm-actions">
+          <button className="ctl" onClick={onCancel}>No</button>
+          <button className="ctl primary" onClick={onStart}>Start camera</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1153,6 +1224,9 @@ function CameraTile({ control, streamCtl }) {
   // feed from growing unboundedly.
   const [feed, setFeed] = useState([]);
 
+  // Controls whether the "camera not running" dialog is visible.
+  const [showDialog, setShowDialog] = useState(false);
+
   // Prepend a timestamped message to the activity feed. useCallback with an
   // empty dependency array gives this function a stable reference so it can
   // be called from the command handlers below without being a dependency of
@@ -1162,19 +1236,20 @@ function CameraTile({ control, streamCtl }) {
   }, []);
 
   // Send a single snapshot command to the camera control socket (port 8080).
-  // control.send returns true if the socket was open and the command was sent,
-  // false if the socket was closed or erroring. We log the outcome either way.
+  // If the stream is not running, show the confirmation dialog instead.
   const sendSnapshot = () => {
+    if (!live) { setShowDialog(true); return; }
     const ok = control.send({ command: "snapshot" });
-    log(ok ? "Snapshot requested" : "Snapshot failed — control socket offline");
+    log(ok ? "Snapshot requested" : "Snapshot failed: control socket offline");
   };
 
   // Send a multi-snapshot command with the current frame count. multiCount
   // is a string from the <select> DOM element; Number() converts it to an
   // integer so the JSON payload has a numeric "count" field.
   const sendMulti = () => {
+    if (!live) { setShowDialog(true); return; }
     const ok = control.send({ command: "multisnapshot", count: Number(multiCount) });
-    log(ok ? `Multisnapshot requested (${multiCount} frames)` : "Multisnapshot failed — control socket offline");
+    log(ok ? `Multisnapshot requested (${multiCount} frames)` : "Multisnapshot failed: control socket offline");
   };
 
   // Send a start_camera command to the stream control socket (port 8081).
@@ -1183,18 +1258,25 @@ function CameraTile({ control, streamCtl }) {
   const sendStart = () => {
     const ok = streamCtl.send({ command: "start_camera" });
     if (ok) { setLive(true); log("Stream started"); }
-    else log("Start failed — stream socket offline");
+    else log("Start failed: stream socket offline");
   };
 
   // Send a stop_camera command to the stream control socket.
   const sendStop = () => {
     const ok = streamCtl.send({ command: "stop_camera" });
     if (ok) { setLive(false); log("Stream stopped"); }
-    else log("Stop failed — stream socket offline");
+    else log("Stop failed: stream socket offline");
   };
 
   return (
     <div className="panel">
+
+      {showDialog && (
+        <CameraStartDialog
+          onStart={() => { sendStart(); setShowDialog(false); }}
+          onCancel={() => setShowDialog(false)}
+        />
+      )}
 
       {/*
         Tile stage: the square visual area. The "live" CSS class activates the
@@ -1255,7 +1337,7 @@ function CameraTile({ control, streamCtl }) {
       */}
       <div className="feed">
         {feed.length === 0
-          ? <div className="feed-empty">No activity yet — commands you send will show up here.</div>
+          ? <div className="feed-empty">No activity yet. Commands you send will show up here.</div>
           : feed.map((item, i) => (
               <div className="feed-item" key={i}>
                 <span className="t mono">{item.t}</span>
@@ -1417,7 +1499,7 @@ function Gallery() {
 
       {/* Empty gallery: the S3 bucket has no objects (no snapshots taken yet). */}
       {photos !== null && photos.length === 0 && !activeTag && (
-        <div className="empty-state">No captures yet — send a snapshot to see it appear here.</div>
+        <div className="empty-state">No captures yet. Send a snapshot to see it appear here.</div>
       )}
 
       {/*
@@ -1500,7 +1582,7 @@ function Gallery() {
 // shared across the UI. Renders the top bar (brand, host setting, connection
 // pills) and the main two-column grid (camera tile, gallery).
 function App() {
-  // The camera Pi's hostname. Initialized lazily: passing a function to
+  // The Roost device's hostname. Initialized lazily: passing a function to
   // useState means React calls it once at mount rather than calling it on
   // every render. loadSavedHost reads from localStorage so the last-used
   // hostname persists across page reloads.
@@ -1529,7 +1611,7 @@ function App() {
       <div className="topbar">
         <div className="brand">
           <span className="brand-dot" />
-          <h1 className="display">picamera</h1>
+          <h1 className="display">roost</h1>
         </div>
         <div className="pills">
           {/*

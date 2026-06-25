@@ -11,12 +11,12 @@ search-by-tag powered by the vision Lambda's DynamoDB output.
 The S3 bucket is private. Listing or reading it from browser JavaScript
 would require either making the bucket public or shipping AWS credentials
 to the browser. The Flask server runs on your local machine, uses the
-`picamera` AWS profile already configured for the uploader, and hands
+`roost` AWS profile already configured for the uploader, and hands
 the frontend short-lived presigned URLs instead.
 
 Camera control (WebSocket commands) does not route through the backend.
 The frontend connects directly to the capture app's WebSocket endpoints
-on the Pi, since those are plain local-network sockets with no secrets.
+on the Roost device, since those are plain local-network sockets with no secrets.
 
 ## Structure
 
@@ -31,7 +31,7 @@ viewer/
 ## Prerequisites
 
 - Python 3.9+
-- An AWS profile named `picamera` in `~/.aws/credentials` with read
+- An AWS profile named `roost` in `~/.aws/credentials` with read
   access to the `picamera-mcoughlin-frames` S3 bucket and the `Roost`
   DynamoDB table
 - The Roost DynamoDB table with a `GSI1` index (written by the vision
@@ -80,7 +80,7 @@ Open `http://localhost:5000` in a browser.
 - Configurable camera host: click the host pill in the top bar to edit
 
 The camera host is persisted in `localStorage` under the key
-`picamera-host` and defaults to `picamera.lan`.
+`roost-host` and defaults to `roost.lan`.
 
 **Gallery (right panel)**
 

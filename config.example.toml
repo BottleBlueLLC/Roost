@@ -1,6 +1,6 @@
 [video]
 # Substring to match against /dev/v4l/by-path entries for your camera.
-# Confirmed on the Pi: both
+# Confirmed on the Roost device: both
 #   platform-xhci-hcd.1-usb-0:1:1.0-video-index0 -> ../../video0
 #   platform-xhci-hcd.1-usbv2-0:1:1.0-video-index0 -> ../../video0
 # point at /dev/video0 (the legacy "usb" alias and "usbv2" alias for the

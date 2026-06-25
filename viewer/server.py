@@ -6,7 +6,7 @@ Why this exists:
     The S3 bucket that stores camera frames is private. Accessing it from
     the browser directly would require either making the bucket public (bad)
     or embedding AWS credentials in the page JavaScript (also bad). Instead,
-    this server holds the credentials server-side via the "picamera" AWS
+    this server holds the credentials server-side via the "roost" AWS
     profile already set up in ~/.aws/credentials for the s3_uploader.py
     script, and hands the browser short-lived presigned URLs that grant
     temporary read access to individual S3 objects without exposing any
@@ -26,8 +26,8 @@ What it does NOT do:
     Camera control (WebSocket commands to start/stop the stream, trigger
     snapshots) does not route through this backend. The frontend JavaScript
     connects directly to the camera capture app's WebSocket endpoints on the
-    Pi (ports 8080 and 8081). Those are plain local-network sockets with no
-    credentials involved, so there is no reason to proxy them.
+    Roost device (ports 8080 and 8081). Those are plain local-network sockets
+    with no credentials involved, so there is no reason to proxy them.
 """
 
 import os
@@ -65,7 +65,8 @@ BUCKET_NAME = "picamera-mcoughlin-frames"
 # The named AWS profile from ~/.aws/credentials that has read access to
 # BUCKET_NAME and DYNAMO_TABLE. Using a named profile avoids hardcoding
 # credentials in this file or relying on environment variables.
-AWS_PROFILE = "picamera"
+# Note: rename or alias the profile in ~/.aws/credentials to match.
+AWS_PROFILE = "roost"
 
 # How long (in seconds) a presigned URL remains valid after it is generated.
 # 3600 seconds = one hour. After this window, the URL stops working and the
@@ -102,7 +103,7 @@ USER_ID = "michael"
 #                               default /static/ prefix
 app = Flask(__name__, static_folder="static", static_url_path="")
 
-# Create a boto3 Session pinned to the picamera AWS profile. A Session holds
+# Create a boto3 Session pinned to the roost AWS profile. A Session holds
 # credentials and region configuration. All AWS clients created from this
 # session inherit the same identity, so the profile name only needs to appear
 # once here.
@@ -352,8 +353,8 @@ if __name__ == "__main__":
     # at startup without editing this file. Defaults to 5000.
     # host="0.0.0.0" binds to all network interfaces so the dashboard is
     # reachable from other machines on the local network (e.g. from a laptop
-    # when the server is running on a Pi or another machine), not just from
-    # localhost on the same machine.
+    # when the server is running on the Roost device or another machine), not just
+    # from localhost on the same machine.
     #
     # Note: Flask's built-in development server is appropriate for this use
     # case (single user, local network, no public exposure). Do not point it
