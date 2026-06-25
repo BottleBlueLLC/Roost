@@ -1,6 +1,6 @@
 # Roost
 
-An open-source, self-hosted camera pipeline you own end to end. Roost runs on a Raspberry
+An open-source, self-hosted security camera pipeline you own end to end. Roost runs on a Raspberry
 Pi with a USB camera, and a Rust app exposes the camera as a set of commands
 over WebSocket. Anything that can send a command can drive it: the dashboard's
 live controls but also a sensor on your network, a door or garage
