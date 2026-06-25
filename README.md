@@ -1,6 +1,6 @@
 # Roost
 
-A self-hosted camera pipeline you own end to end. The Roost device captures
+A self-hosted camera pipeline you own end to end. Roost is powered by a Raspberry Pi and captures
 from a USB camera, a Rust app exposes control over WebSocket, a Python
 script pushes snapshots to a private S3 bucket, a Lambda runs Claude
 vision on each new photo to describe and tag it, and a dashboard pulls it
