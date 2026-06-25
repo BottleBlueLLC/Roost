@@ -24,7 +24,7 @@ import boto3
 from botocore.exceptions import ClientError
 
 # --- Config ---------------------------------------------------------------
-BUCKET_NAME = "picamera-mcoughlin-frames"
+BUCKET_NAME = "your-bucket-name"
 FRAMES_DIR = os.path.expanduser("~/Roost-main/frames")
 POLL_INTERVAL_SECONDS = 2
 # Skip files modified within this many seconds, in case one is still being

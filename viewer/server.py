@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+#
+# Roost
+# Bottle Blue LLC
+# Authored by Michael Coughlin
+# 2026-06-25
+# https://bottlebluellc.com
+# https://blog.hiimmichael.com/articles/roost-setup-tutorial.html
 """
 server.py -- Flask backend for the Roost camera viewer dashboard.
 
@@ -60,7 +67,7 @@ from botocore.exceptions import ClientError
 
 # The S3 bucket where s3_uploader.py deposits camera frames.
 # This bucket has no public access; all reads go through presigned URLs.
-BUCKET_NAME = "picamera-mcoughlin-frames"
+BUCKET_NAME = "your-bucket-name"
 
 # The named AWS profile from ~/.aws/credentials that has read access to
 # BUCKET_NAME and DYNAMO_TABLE. Using a named profile avoids hardcoding

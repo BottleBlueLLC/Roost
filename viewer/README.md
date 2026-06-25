@@ -32,7 +32,7 @@ viewer/
 
 - Python 3.9+
 - An AWS profile named `roost` in `~/.aws/credentials` with read
-  access to the `picamera-mcoughlin-frames` S3 bucket and the `Roost`
+  access to the `your-bucket-name` S3 bucket and the `Roost`
   DynamoDB table
 - The Roost DynamoDB table with a `GSI1` index (written by the vision
   Lambda; see `roost-vision/`)
