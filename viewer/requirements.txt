@@ -1,2 +1,12 @@
+# Flask: the HTTP web framework that runs the dashboard backend (server.py).
+# It handles URL routing, serves the static index.html file, and provides
+# helpers for returning JSON responses to the browser.
 flask
+
+# boto3: the official AWS SDK for Python. server.py uses it to communicate
+# with two AWS services:
+#   - S3: to list objects in the private photo bucket and generate short-lived
+#     presigned URLs the browser can use to load images directly.
+#   - DynamoDB: to query the tag index that the vision Lambda populates
+#     whenever it processes a new photo.
 boto3
