@@ -37,13 +37,13 @@
         so it persists across page reloads.
 
   Data flow for photos:
-        Browser --> GET /api/photos --> Flask --> S3 list + presign --> Browser
+        Browser -> GET /api/photos -> Flask -> S3 list + presign -> Browser
         Browser then loads image bytes directly from the S3 presigned URL,
         not through Flask.
 
   Data flow for tag search:
-        Browser --> GET /api/search?tag=X --> Flask --> DynamoDB GSI query
-        --> S3 presign for each result --> Browser
+        Browser -> GET /api/search?tag=X -> Flask -> DynamoDB GSI query
+        -> S3 presign for each result -> Browser
 -->
 <html lang="en">
 <head>
