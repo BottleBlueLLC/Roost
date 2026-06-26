@@ -73,6 +73,8 @@ GSI for tag lookups), so searching "find all my photos tagged dog, newest
 first" is one indexed query, and the schema already supports multiple
 cameras and users without a migration.
 
+<img width="1200" height="627" alt="roost_1" src="https://github.com/user-attachments/assets/b0667f2b-ee88-40af-9aa3-748ea9fc7567" />
+
 ### Dashboard (`viewer/`)
 
 A Flask backend plus a single-file React frontend. The backend holds the
