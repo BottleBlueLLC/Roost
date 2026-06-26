@@ -4,7 +4,7 @@ Roost is an open-source, self-hosted security camera pipeline you own end to end
 
 Under the hood: a Rust app on the Pi handles capture and exposes WebSocket control, a Python script pushes snapshots to a private S3 bucket, a vision Lambda writes Claude's descriptions and tags to DynamoDB using single-table design, and a Flask + React dashboard pulls it all together with live controls and search-by-contents.
 
-<img width="1200" height="627" alt="roost" src="https://github.com/user-attachments/assets/d69d732b-1ec4-4320-806d-025825d3e425" />
+<img width="1200" height="627" alt="roost_1" src="https://github.com/user-attachments/assets/b0667f2b-ee88-40af-9aa3-748ea9fc7567" />
 
 ## The pipeline
 
@@ -72,8 +72,6 @@ The DynamoDB table uses a single-table design (generic PK/SK keys plus a
 GSI for tag lookups), so searching "find all my photos tagged dog, newest
 first" is one indexed query, and the schema already supports multiple
 cameras and users without a migration.
-
-<img width="1200" height="627" alt="roost_1" src="https://github.com/user-attachments/assets/b0667f2b-ee88-40af-9aa3-748ea9fc7567" />
 
 ### Dashboard (`viewer/`)
 
