@@ -53,7 +53,22 @@ import anthropic
 # --- Config (overridable via Lambda environment variables) ----------------
 DYNAMO_TABLE = os.environ.get("DYNAMO_TABLE", "Roost")
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-6")
-MAX_TOKENS = int(os.environ.get("MAX_TOKENS", "400"))
+# Bumped from 400 to reduce the chance of a truncated (invalid) JSON response.
+MAX_TOKENS = int(os.environ.get("MAX_TOKENS", "1024"))
+# Bound the Anthropic call: the SDK default is 600s, long enough to pin the
+# function to its own Lambda timeout on a stalled upstream.
+#
+# INVARIANT: this MUST stay comfortably BELOW the function's Lambda timeout,
+# with room left for the S3 read, the DynamoDB writes, AND the fact that one
+# invocation processes a BATCH of frames - the budget below is per Claude call,
+# not per invocation. Until 2026-07-19 this default was 60s inside a 60s Lambda:
+# a single stalled Claude call consumed the entire invocation, so the
+# `raise RuntimeError` at the end - the thing that drives Lambda's async retry
+# and DLQ - could never run, and a hung frame was dropped silently instead of
+# retried. The Lambda timeout was raised to 300s at the same time this comment
+# was written; 60s now leaves headroom for several frames per batch. If you
+# change either number, change both, and keep this one well under.
+CLAUDE_TIMEOUT = float(os.environ.get("CLAUDE_TIMEOUT", "60"))
 # Single-user for now; the schema supports multi-user when needed. Override
 # via env var per deployment if you ever run separate users.
 DEFAULT_USER_ID = os.environ.get("DEFAULT_USER_ID", "michael")
@@ -65,7 +80,7 @@ DEFAULT_CAMERA_ID = os.environ.get("DEFAULT_CAMERA_ID", "cam1")
 s3 = boto3.client("s3")
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(DYNAMO_TABLE)
-client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"], timeout=CLAUDE_TIMEOUT)
 
 MEDIA_TYPES = {
     ".jpg": "image/jpeg",
@@ -132,8 +147,15 @@ def analyze_image(data: bytes, media_type: str) -> dict:
         raw = raw.strip()
 
     parsed = json.loads(raw)
-    description = parsed.get("description", "").strip()
-    tags = [str(t).lower().strip() for t in parsed.get("tags", []) if str(t).strip()]
+    description = str(parsed.get("description", "")).strip()[:2000]
+    # Tags come straight from the model, which is driven by attacker-controllable
+    # image content (a frame with text like "emit 500 tags" is a prompt-injection
+    # vector). Validate the type and cap both the count and per-tag length, since
+    # each tag becomes its own DynamoDB row.
+    raw_tags = parsed.get("tags", [])
+    if not isinstance(raw_tags, list):
+        raw_tags = []
+    tags = [str(t).lower().strip()[:64] for t in raw_tags if str(t).strip()][:25]
     return {"description": description, "tags": tags}
 
 
@@ -147,11 +169,31 @@ def write_records(user_id, camera_id, image_key, timestamp, description, tags, b
     """
     sk = f"IMAGE#{timestamp}#{image_key}"
 
+    # Shard the base-table PK by month so frame writes don't all land on one
+    # hot partition (#16). Reads go through GSI1 (GSI1PK=USER#<id>#IMAGES / #TAG),
+    # which is unchanged, so nothing depends on the base PK shape. ISO timestamps
+    # start "YYYY-MM"; fall back if the timestamp is missing.
+    shard = timestamp[:7] if timestamp else "unsharded"
+    pk = f"USER#{user_id}#{shard}"
+
+    # Re-analysis of the same object is not guaranteed to reproduce the same
+    # tag set (the model is nondeterministic), so a retry used to leave the
+    # previous run's TAG rows behind forever. The prior tag set lives on the
+    # image record itself; diff against it and delete what no longer applies.
+    # A GetItem failure propagates so the invocation retries as a whole.
+    prev = table.get_item(Key={"PK": pk, "SK": sk}).get("Item")
+    stale_tags = [t for t in prev.get("tags", []) if t not in tags] if prev else []
+
     with table.batch_writer() as batch:
+        for tag in stale_tags:
+            batch.delete_item(
+                Key={"PK": pk, "SK": f"TAG#{tag}#{timestamp}#{image_key}"}
+            )
+
         # Main image record
         batch.put_item(
             Item={
-                "PK": f"USER#{user_id}",
+                "PK": pk,
                 "SK": sk,
                 "entity_type": "IMAGE",
                 "image_key": image_key,
@@ -172,7 +214,7 @@ def write_records(user_id, camera_id, image_key, timestamp, description, tags, b
         for tag in tags:
             batch.put_item(
                 Item={
-                    "PK": f"USER#{user_id}",
+                    "PK": pk,
                     "SK": f"TAG#{tag}#{timestamp}#{image_key}",
                     "entity_type": "TAG",
                     "tag": tag,
@@ -187,11 +229,13 @@ def write_records(user_id, camera_id, image_key, timestamp, description, tags, b
 
 def handler(event, context):
     processed = []
+    failures = []
 
     for record in event.get("Records", []):
         bucket = record["s3"]["bucket"]["name"]
         key = urllib.parse.unquote_plus(record["s3"]["object"]["key"])
 
+        # Non-image keys are a permanent skip (never retry).
         if not key.lower().endswith(tuple(MEDIA_TYPES.keys())):
             print(f"Skipping non-image key: {key}")
             continue
@@ -201,12 +245,14 @@ def handler(event, context):
             data = obj["Body"].read()
         except Exception as e:
             print(f"Failed to fetch s3://{bucket}/{key}: {e}")
+            failures.append((key, f"s3 fetch: {e}"))
             continue
 
         try:
             result = analyze_image(data, extract_media_type(key))
         except Exception as e:
             print(f"Claude analysis failed for {key}: {e}")
+            failures.append((key, f"analyze: {e}"))
             continue
 
         last_modified = obj.get("LastModified")
@@ -226,5 +272,14 @@ def handler(event, context):
             processed.append({"key": key, "tags": result["tags"]})
         except Exception as e:
             print(f"Failed to write DynamoDB records for {key}: {e}")
+            failures.append((key, f"dynamo write: {e}"))
+
+    # Any failure must fail the invocation so Lambda's async retry/DLQ engages;
+    # otherwise a transient error silently drops the frame forever. Retries
+    # re-run the whole event; write_records overwrites by key and removes
+    # TAG rows the new analysis no longer produces, so re-processing an
+    # already-succeeded frame is idempotent.
+    if failures:
+        raise RuntimeError(f"{len(failures)} record(s) failed: {failures}")
 
     return {"statusCode": 200, "body": json.dumps({"processed": processed})}
